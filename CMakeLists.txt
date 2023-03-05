@@ -12,6 +12,8 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   gazebo_msgs
+  message_generation
+  grid_map_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -53,6 +55,10 @@ find_package(catkin REQUIRED COMPONENTS
 #   Message1.msg
 #   Message2.msg
 # )
+add_message_files(
+  FILES
+  dataset.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -73,6 +79,11 @@ find_package(catkin REQUIRED COMPONENTS
 #   DEPENDENCIES
 #   std_msgs
 # )
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+  grid_map_msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -105,8 +116,8 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES respawn_robot
-#  CATKIN_DEPENDS roscpp rospy std_msgs
+ LIBRARIES respawn_robot
+ CATKIN_DEPENDS roscpp rospy std_msgs message_runtime
 #  DEPENDS system_lib
 )
 
