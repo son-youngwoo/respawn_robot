@@ -47,6 +47,14 @@ double rand_x_tar = 0;
 double rand_y_tar = 0;
 double x_init = 0;
 double y_init = 0;
+int num_div = 0;
+double yaw_target_deg = 0;
+double add_x = 0;
+double add_y = 0;
+double d = 0;
+double R_success = 0;
+double xvel_target = 0;
+double yvel_target = 0;
 
 respawn_robot::dataset dataset;
 grid_map_msgs::GridMap elevation_map_raw;
@@ -63,32 +71,58 @@ void msgCallbackBodyPose(const std_msgs::Float32MultiArray::ConstPtr& msg)
     pitch = msg->data[4];
     yaw = msg->data[5];
 
-    // if (abs(roll) > roll_limit || abs(pitch) > pitch_limit || 시간이 너무많이 걸린다) {
-    //     s_or_f = 0; 
-    //     get_s_or_f = 1;
+    // if(rand_x_tar < 0 && rand_y_tar < 0) {
+    //     add_x = -0.2;
+    //     add_y = -0.2;
     // }
-    // else if ( abs(x - rand_x_tar) < x_thres && abs(y - rand_y_tar) < y_thres) {
-    //     s_or_f = 1;
+    // else if(rand_x_tar < 0 && rand_y_tar > 0) {
+    //     add_x = -0.2;
+    //     add_y = 0.2;
+    // }
+    // else if(rand_x_tar > 0 && rand_y_tar < 0) {
+    //     add_x = 0.2;
+    //     add_y = -0.2;
+    // }
+    // else if(rand_x_tar > 0 && rand_y_tar > 0) {
+    //     add_x = 0.2;
+    //     add_y = 0.2;
+    // }
+    // else if(rand_x_tar < 0 && rand_y_tar == 0) {
+    //     add_x = -sqrt(0.08);
+    //     add_y = 0;
+    // }
+    // else if(rand_x_tar > 0 && rand_y_tar == 0) {
+    //     add_x = sqrt(0.08);
+    //     add_y = 0;
+    // }
+    // else if(rand_x_tar == 0 && rand_y_tar < 0) {
+    //     add_x = 0;
+    //     add_y = -sqrt(0.08);
+    // }
+    // else if(rand_x_tar == 0 && rand_y_tar > 0) {
+    //     add_x = 0;
+    //     add_y = sqrt(0.08);
+    // }
+
+    // d = sqrt((rand_x_tar + add_x - x)*(rand_x_tar + add_x - x) + (rand_y_tar + add_y - y)*(rand_y_tar + add_y - y));
+    // R_success = sqrt(0.08);
+
+    // if ( d < R_success) // 로봇이 성공인지 실패인지 여부
+    // {
     //     get_s_or_f = 1;
+    //     s_or_f = 1;
     // }
     // else {
     //     get_s_or_f = 0;
     // }
 
-    // if (msg->data[0] < -1) // 로봇이 성공인지 실패인지 여부
-    // {
-    //     get_s_or_f = 1;
-    // }
-    // else {
-    //     get_s_or_f = 0;
-    // }
-    
-    double d = sqrt((rand_x_tar - x)*(rand_x_tar - x) + (rand_y_tar - y)*(rand_y_tar - y));
-    double R_success = 0.1;
+    d = sqrt((rand_x_tar - x)*(rand_x_tar - x) + (rand_y_tar - y)*(rand_y_tar - y));
+    R_success = sqrt(0.15);
 
     if ( d < R_success) // 로봇이 성공인지 실패인지 여부
     {
         get_s_or_f = 1;
+        s_or_f = 1;
     }
     else {
         get_s_or_f = 0;
@@ -117,6 +151,8 @@ int main(int argc, char** argv)
     ros::Publisher pub_controlinput = nh.advertise<std_msgs::Int8>("/aidin81/ControlInput", 100);
     ros::Publisher pub_dataset = nh.advertise<respawn_robot::dataset>("/aidin81/dataset", 100);
     ros::Publisher pub_xvel = nh.advertise<std_msgs::Float32>("/aidin81/xvel_target", 100);
+    ros::Publisher pub_vel = nh.advertise<std_msgs::Float32MultiArray>("/aidin81/vel_target", 100);
+
 
 
     ros::Rate rate(2); // 1초에 2번
@@ -180,13 +216,14 @@ int main(int argc, char** argv)
             respawn_flag = 3;
         }
         else if (respawn_flag == 3) {  // 3. 타겟 포지션 보내고 데이터셋에 저장하기.    
+     
             timer2 += 0.5;
             if(timer2 == 0.5) {       
                 std::cout << "publish target position" << std::endl;        
 
                 // Define the minimum and maximum radii
-                double min_radius = 0.5;
-                double max_radius = 0.8;
+                double min_radius = 0.8;
+                double max_radius = 1.0;
                 double centerX = x;
                 double centerY = y;
 
@@ -211,18 +248,22 @@ int main(int argc, char** argv)
                 dataset.x = rand_x_tar - centerX; // robot base
                 dataset.y = rand_y_tar - centerY; // robot base
 
-                yaw_target = atan2(rand_y_tar - y, rand_x_tar - x); // theta based world frame  
+                yaw_target = atan2(rand_y_tar - y, rand_x_tar - x); // theta based world frame
+
+                yaw_target_deg = abs(yaw_target/M_PI*180);
+
+                num_div = yaw_target_deg / 6;
                 
-                yaw_target_dis = yaw_target / 10;
+                yaw_target_dis = yaw_target / num_div;
             }
             
             k++;
 
-            if(k < 11) {
+            if(k < num_div + 1) {
                 _yaw_target = yaw_target_dis*k;
             }
             else {
-                _yaw_target = yaw_target_dis*10;
+                _yaw_target = yaw_target_dis*num_div;
             }
         
             tf2::Quaternion q;
@@ -254,28 +295,37 @@ int main(int argc, char** argv)
 
             pub_path.publish(path);
 
-            if(abs(yaw_target - _yaw_target) < 0.05) {
+            if(abs(yaw_target - _yaw_target) < 0.01) {
                 k = 0;
                 timer2 = 0;
 
+                // xvel_target = (rand_x_tar - x_init)/10; 
+                // yvel_target = (rand_y_tar - y_init)/10;
+
+                // xvel_target = (rand_x_tar - x_init)/10; 
+                // yvel_target = (rand_y_tar - y_init)/10;
+                
+                // std_msgs::Float32MultiArray vel_target;
+                // vel_target.data.push_back(xvel_target);
+                // vel_target.data.push_back(yvel_target);
+                // pub_vel.publish(vel_target);
+
                 std_msgs::Float32 xvel_target;
-                xvel_target.data = 0.05;
+                xvel_target.data = 0.1;
                 pub_xvel.publish(xvel_target);
 
                 respawn_flag = 4;
             }
 
-            // if (abs(yaw_target - yaw) < 0.05){  
-            //     k = 0;
-            //     timer2 = 0;
-
-            //     respawn_flag = 4;
-            // }
         }
         else if(respawn_flag == 4) { // 4. 성공인지 실패인지 결과가 나오면 데이터셋에 저장하고 퍼블리시하기.
             std::cout << "move ..." << std::endl;        
 
             if (get_s_or_f == 1) {
+                // std_msgs::Float32MultiArray vel_target;
+                // vel_target.data.push_back(0);
+                // vel_target.data.push_back(0);
+                // pub_vel.publish(vel_target);
                 std_msgs::Float32 xvel_target;
                 xvel_target.data = 0;
                 pub_xvel.publish(xvel_target);
