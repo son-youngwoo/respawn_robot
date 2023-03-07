@@ -5,6 +5,8 @@
 #include <gazebo_msgs/SetModelState.h>
 #include <std_msgs/Float32MultiArray.h>
 #include <std_msgs/String.h>
+#include <std_msgs/Float32.h>
+
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
@@ -82,7 +84,7 @@ void msgCallbackBodyPose(const std_msgs::Float32MultiArray::ConstPtr& msg)
     // }
     
     double d = sqrt((rand_x_tar - x)*(rand_x_tar - x) + (rand_y_tar - y)*(rand_y_tar - y));
-    double R_success = 0.3;
+    double R_success = 0.1;
 
     if ( d < R_success) // 로봇이 성공인지 실패인지 여부
     {
@@ -114,6 +116,8 @@ int main(int argc, char** argv)
     ros::Publisher pub_zerotorqueflag = nh.advertise<std_msgs::Bool>("/aidin81/ZeroTorqueFlag", 100);
     ros::Publisher pub_controlinput = nh.advertise<std_msgs::Int8>("/aidin81/ControlInput", 100);
     ros::Publisher pub_dataset = nh.advertise<respawn_robot::dataset>("/aidin81/dataset", 100);
+    ros::Publisher pub_xvel = nh.advertise<std_msgs::Float32>("/aidin81/xvel_target", 100);
+
 
     ros::Rate rate(2); // 1초에 2번
 
@@ -180,29 +184,32 @@ int main(int argc, char** argv)
             if(timer2 == 0.5) {       
                 std::cout << "publish target position" << std::endl;        
 
-                double radius = 5.0;
-                double centerX = 0.0;
-                double centerY = 0.0;
+                // Define the minimum and maximum radii
+                double min_radius = 0.5;
+                double max_radius = 0.8;
+                double centerX = x;
+                double centerY = y;
 
-                // Seed the random number generator
-                std::random_device rd_tar;
-                std::mt19937 gen_tar(rd_tar());
-                std::uniform_real_distribution<> dis_tar(0.0, 1.0);
-
-                // Generate a random radius and angle
-                double r = radius * std::sqrt(dis_tar(gen_tar));
-                double theta = 2.0 * M_PI * dis_tar(gen_tar);
-                
                 x_init = x;
                 y_init = y;
-
-                // Convert polar coordinates to Cartesian coordinates
-                rand_x_tar = x + r * std::cos(theta);
-                rand_y_tar = y + r * std::sin(theta);
                 
+                // Define the random number generator
+                std::random_device rd;
+                std::mt19937 gen(rd());
+                std::uniform_real_distribution<> dis_angle(0.0, 2.0 * M_PI);
+                std::uniform_real_distribution<> dis_radius(min_radius, max_radius);
+                
+                // Generate a random angle and distance
+                double angle = dis_angle(gen);
+                double radius = dis_radius(gen);
+                
+                // Calculate the x and y coordinates
+                rand_x_tar = centerX + radius * std::cos(angle); // world base
+                rand_y_tar = centerY + radius * std::sin(angle); // world base
+
                 // target x,y dataset 저장.
-                dataset.x = rand_x_tar;
-                dataset.y = rand_y_tar;
+                dataset.x = rand_x_tar - centerX; // robot base
+                dataset.y = rand_y_tar - centerY; // robot base
 
                 yaw_target = atan2(rand_y_tar - y, rand_x_tar - x); // theta based world frame  
                 
@@ -251,6 +258,10 @@ int main(int argc, char** argv)
                 k = 0;
                 timer2 = 0;
 
+                std_msgs::Float32 xvel_target;
+                xvel_target.data = 0.05;
+                pub_xvel.publish(xvel_target);
+
                 respawn_flag = 4;
             }
 
@@ -265,6 +276,10 @@ int main(int argc, char** argv)
             std::cout << "move ..." << std::endl;        
 
             if (get_s_or_f == 1) {
+                std_msgs::Float32 xvel_target;
+                xvel_target.data = 0;
+                pub_xvel.publish(xvel_target);
+
                 if (s_or_f == 1) {
                     std::cout << "success !" << std::endl; 
                 }
@@ -282,7 +297,6 @@ int main(int argc, char** argv)
 
             controlinput.data = 3;
             pub_controlinput.publish(controlinput);
-
 
             nav_msgs::Path path;
 
