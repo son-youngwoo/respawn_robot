@@ -18,7 +18,7 @@
 #include <iostream>
 #include <cmath>
 
-int respawn_flag = 1;
+int respawn_flag = 0;
 bool get_s_or_f = 0;
 double x = 0;
 double y = 0;
@@ -33,10 +33,12 @@ double yaw = 0;
 int data_id = 0;
 bool s_or_f;
 int cnt = 0;
+double timer0 = 0;
 double timer1 = 0;
 double timer2 = 0;
 double timer3 = 0;
 double yaw_target = 0;
+double _yaw_target = 0;
 double yaw_target_dis = 0;
 int k = 0;
 double rand_x_tar = 0;
@@ -71,7 +73,18 @@ void msgCallbackBodyPose(const std_msgs::Float32MultiArray::ConstPtr& msg)
     //     get_s_or_f = 0;
     // }
 
-    if (msg->data[0] < -1) // 로봇이 성공인지 실패인지 여부
+    // if (msg->data[0] < -1) // 로봇이 성공인지 실패인지 여부
+    // {
+    //     get_s_or_f = 1;
+    // }
+    // else {
+    //     get_s_or_f = 0;
+    // }
+    
+    double d = sqrt((rand_x_tar - x)*(rand_x_tar - x) + (rand_y_tar - y)*(rand_y_tar - y));
+    double R_success = 0.3;
+
+    if ( d < R_success) // 로봇이 성공인지 실패인지 여부
     {
         get_s_or_f = 1;
     }
@@ -79,6 +92,7 @@ void msgCallbackBodyPose(const std_msgs::Float32MultiArray::ConstPtr& msg)
         get_s_or_f = 0;
     }
 }
+
 
 void msgCallbackElevationMap(const grid_map_msgs::GridMap::ConstPtr& msg)
 {
@@ -104,8 +118,28 @@ int main(int argc, char** argv)
     ros::Rate rate(2); // 1초에 2번
 
     while(ros::ok()) {
+        if (respawn_flag == 0) {
+            timer0 += 0.5;
 
-        if (respawn_flag == 1) { // 1. mpc 켜는 명령 보내기, id 데이터셋에 저장하기.
+            if(timer0 == 0.5) {
+                std::cout << "initialize sensor" << std::endl;
+                controlinput.data = 1;
+                pub_controlinput.publish(controlinput);
+            }
+            else if(timer0 == 6) {
+                std::cout << "initialize imu" << std::endl;
+                controlinput.data = 2;
+                pub_controlinput.publish(controlinput);
+            }
+            else if(timer0 == 8) {
+                std::cout << "command crawl mode"  << std::endl;
+                controlinput.data = 3;
+                pub_controlinput.publish(controlinput);
+                
+                respawn_flag = 1 ;
+            }
+        }
+        else if (respawn_flag == 1) { // 1. mpc 켜는 명령 보내기, id 데이터셋에 저장하기.
             timer1 += 0.5;
                 
             if(timer1 == 2) {
@@ -113,16 +147,22 @@ int main(int argc, char** argv)
                 controlinput.data = 2;
                 pub_controlinput.publish(controlinput);
             }
-            else if(timer1 == 3) {
+            else if(timer1 == 4) {
                 std::cout << "command stand mode"  << std::endl;
+                controlinput.data = 3;
+                pub_controlinput.publish(controlinput);
+            }
+            else if(timer1 == 5) {
+                std::cout << "command crawl mode"  << std::endl;
                 controlinput.data = 4;
                 pub_controlinput.publish(controlinput);
             }
-            else if(timer1 == 4) {
+            else if(timer1 == 6) {
                 std::cout << "cammand mpc mode" << std::endl;
                 controlinput.data = 5;
-                pub_controlinput.publish(controlinput);
-
+                pub_controlinput.publish(controlinput);    
+            }
+            else if(timer1 == 7) {
                 timer1 = 0;
 
                 dataset.id = data_id;
@@ -167,22 +207,20 @@ int main(int argc, char** argv)
                 yaw_target = atan2(rand_y_tar - y, rand_x_tar - x); // theta based world frame  
                 
                 yaw_target_dis = yaw_target / 10;
-
-
             }
+            
             k++;
 
             if(k < 11) {
-                yaw_target = yaw_target_dis*k;
+                _yaw_target = yaw_target_dis*k;
             }
             else {
-                yaw_target = yaw_target_dis*10;
+                _yaw_target = yaw_target_dis*10;
             }
         
-
             tf2::Quaternion q;
 
-            q.setRPY(0, 0, yaw_target);
+            q.setRPY(0, 0, _yaw_target);
 
             nav_msgs::Path path;
 
@@ -209,12 +247,19 @@ int main(int argc, char** argv)
 
             pub_path.publish(path);
 
-            if (abs(yaw_target - yaw) < 0.1){  
+            if(abs(yaw_target - _yaw_target) < 0.05) {
                 k = 0;
                 timer2 = 0;
 
                 respawn_flag = 4;
             }
+
+            // if (abs(yaw_target - yaw) < 0.05){  
+            //     k = 0;
+            //     timer2 = 0;
+
+            //     respawn_flag = 4;
+            // }
         }
         else if(respawn_flag == 4) { // 4. 성공인지 실패인지 결과가 나오면 데이터셋에 저장하고 퍼블리시하기.
             std::cout << "move ..." << std::endl;        
@@ -238,30 +283,31 @@ int main(int argc, char** argv)
             controlinput.data = 3;
             pub_controlinput.publish(controlinput);
 
-            // nav_msgs::Path path;
 
-            // path.header.stamp = ros::Time::now();
-            // path.header.frame_id = "world";
-            // path.poses.resize(2);  // allocate memory for the poses array
-            // path.poses[0].header.frame_id = "world";
-            // path.poses[0].header.stamp = ros::Time::now();
-            // path.poses[0].pose.position.x = x_init;
-            // path.poses[0].pose.position.y = y_init;
-            // path.poses[0].pose.orientation.x = 0;
-            // path.poses[0].pose.orientation.y = 0;
-            // path.poses[0].pose.orientation.z = 0;
-            // path.poses[0].pose.orientation.w = 1;
+            nav_msgs::Path path;
 
-            // path.poses[1].header.frame_id = "world";
-            // path.poses[1].header.stamp = ros::Time::now();
-            // path.poses[1].pose.position.x = x;
-            // path.poses[1].pose.position.y = y;
-            // path.poses[1].pose.orientation.x = 0;
-            // path.poses[1].pose.orientation.y = 0;
-            // path.poses[1].pose.orientation.z = 0;
-            // path.poses[1].pose.orientation.w = 1;
+            path.header.stamp = ros::Time::now();
+            path.header.frame_id = "world";
+            path.poses.resize(2);  // allocate memory for the poses array
+            path.poses[0].header.frame_id = "world";
+            path.poses[0].header.stamp = ros::Time::now();
+            path.poses[0].pose.position.x = 0;
+            path.poses[0].pose.position.y = 0;
+            path.poses[0].pose.orientation.x = 0;
+            path.poses[0].pose.orientation.y = 0;
+            path.poses[0].pose.orientation.z = 0;
+            path.poses[0].pose.orientation.w = 1;
 
-            // pub_path.publish(path);
+            path.poses[1].header.frame_id = "world";
+            path.poses[1].header.stamp = ros::Time::now();
+            path.poses[1].pose.position.x = 0;
+            path.poses[1].pose.position.y = 0;
+            path.poses[1].pose.orientation.x = 0;
+            path.poses[1].pose.orientation.y = 0;
+            path.poses[1].pose.orientation.z = 0;
+            path.poses[1].pose.orientation.w = 1;
+
+            pub_path.publish(path);
 
             timer3 += 0.5;
             if(timer3 == 0.5) {
@@ -273,20 +319,6 @@ int main(int argc, char** argv)
             }
         }    
 
-        // else if(respawn_flag == 5) { // 5. 로봇 제로토크 보내기
-        //     std::cout << "respawn_flag: " << respawn_flag << std::endl;        
-
-        //     // std_msgs::Bool zerotorqueflag;
-        //     // zerotorqueflag.data = 1;
-        //     // pub_zerotorqueflag.publish(zerotorqueflag);
-
-        //     timer += 0.5;
-        
-        //     if(timer == 3) {
-        //         respawn_flag = 6;
-        //         timer = 0;            
-        //     }
-        // }
         else if(respawn_flag == 6) { // 6. 랜덤 포지션으로 리스폰하기.
             std::cout << "respawn ..." << std::endl;        
 
