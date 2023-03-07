@@ -20,6 +20,8 @@
 #include <iostream>
 #include <cmath>
 
+#include <std_srvs/Empty.h>
+
 int respawn_flag = 0;
 bool get_s_or_f = 0;
 double x = 0;
@@ -38,7 +40,9 @@ int cnt = 0;
 double timer0 = 0;
 double timer1 = 0;
 double timer2 = 0;
+double _timer2 = 0;
 double timer3 = 0;
+double timer_reset = 0;
 double yaw_target = 0;
 double _yaw_target = 0;
 double yaw_target_dis = 0;
@@ -72,40 +76,53 @@ void msgCallbackBodyPose(const std_msgs::Float32MultiArray::ConstPtr& msg)
     yaw = msg->data[5];
 
     // if(rand_x_tar < 0 && rand_y_tar < 0) {
-    //     add_x = -0.2;
-    //     add_y = -0.2;
+    //     add_x = -0.1;
+    //     add_y = -0.1;
     // }
     // else if(rand_x_tar < 0 && rand_y_tar > 0) {
-    //     add_x = -0.2;
-    //     add_y = 0.2;
+    //     add_x = -0.1;
+    //     add_y = 0.1;
     // }
     // else if(rand_x_tar > 0 && rand_y_tar < 0) {
-    //     add_x = 0.2;
-    //     add_y = -0.2;
+    //     add_x = 0.1;
+    //     add_y = -0.1;
     // }
     // else if(rand_x_tar > 0 && rand_y_tar > 0) {
-    //     add_x = 0.2;
-    //     add_y = 0.2;
+    //     add_x = 0.1;
+    //     add_y = 0.1;
     // }
     // else if(rand_x_tar < 0 && rand_y_tar == 0) {
-    //     add_x = -sqrt(0.08);
+    //     add_x = -sqrt(2)/10;
     //     add_y = 0;
     // }
     // else if(rand_x_tar > 0 && rand_y_tar == 0) {
-    //     add_x = sqrt(0.08);
+    //     add_x = sqrt(2)/10;
     //     add_y = 0;
     // }
     // else if(rand_x_tar == 0 && rand_y_tar < 0) {
     //     add_x = 0;
-    //     add_y = -sqrt(0.08);
+    //     add_y = -sqrt(2)/10;
     // }
     // else if(rand_x_tar == 0 && rand_y_tar > 0) {
     //     add_x = 0;
-    //     add_y = sqrt(0.08);
+    //     add_y = sqrt(2)/10;
     // }
 
     // d = sqrt((rand_x_tar + add_x - x)*(rand_x_tar + add_x - x) + (rand_y_tar + add_y - y)*(rand_y_tar + add_y - y));
-    // R_success = sqrt(0.08);
+    // R_success = sqrt(2)/10;
+
+    // if ( d < R_success) // 로봇이 성공인지 실패인지 여부
+    // {
+    //     get_s_or_f = 1;
+    //     s_or_f = 1;
+    // }
+    // else {
+    //     get_s_or_f = 0;
+    // }
+
+    // d = sqrt((rand_x_tar - x)*(rand_x_tar - x) + (rand_y_tar - y)*(rand_y_tar - y));
+    // // R_success = sqrt(0.08);
+    // R_success = 0.15;
 
     // if ( d < R_success) // 로봇이 성공인지 실패인지 여부
     // {
@@ -117,15 +134,21 @@ void msgCallbackBodyPose(const std_msgs::Float32MultiArray::ConstPtr& msg)
     // }
 
     d = sqrt((rand_x_tar - x)*(rand_x_tar - x) + (rand_y_tar - y)*(rand_y_tar - y));
-    R_success = sqrt(0.15);
-
-    if ( d < R_success) // 로봇이 성공인지 실패인지 여부
-    {
-        get_s_or_f = 1;
-        s_or_f = 1;
+    // R_success = sqrt(0.08);
+    R_success = 0.15;
+    if(roll < roll_limit && pitch < pitch_limit) {
+        if ( d < R_success) // 로봇이 성공인지 실패인지 여부
+        {
+            get_s_or_f = 1;
+            s_or_f = 1;
+        }
+        else {
+            get_s_or_f = 0;
+        }
     }
     else {
-        get_s_or_f = 0;
+        get_s_or_f = 1;
+        s_or_f = 0;
     }
 }
 
@@ -152,6 +175,8 @@ int main(int argc, char** argv)
     ros::Publisher pub_dataset = nh.advertise<respawn_robot::dataset>("/aidin81/dataset", 100);
     ros::Publisher pub_xvel = nh.advertise<std_msgs::Float32>("/aidin81/xvel_target", 100);
     ros::Publisher pub_vel = nh.advertise<std_msgs::Float32MultiArray>("/aidin81/vel_target", 100);
+
+    ros::ServiceClient client = nh.serviceClient<std_srvs::Empty>("/aidin81/elevation_mapping/clear_map");
 
 
 
@@ -197,12 +222,22 @@ int main(int argc, char** argv)
                 controlinput.data = 4;
                 pub_controlinput.publish(controlinput);
             }
-            else if(timer1 == 6) {
+            else if(timer1 == 6 ) {
                 std::cout << "cammand mpc mode" << std::endl;
                 controlinput.data = 5;
                 pub_controlinput.publish(controlinput);    
             }
-            else if(timer1 == 7) {
+            else if(timer1 == 8) {
+                std::cout << "elevation map reset" << std::endl;
+                std_srvs::Empty srv;
+                if (client.call(srv)) {
+                    ROS_INFO("Elevation map cleared.");
+                } else {
+                    ROS_ERROR("Failed to call service /aidin81/elevation_mapping/clear_map");
+                }
+                
+            }
+            else if(timer1 == 9) {
                 timer1 = 0;
 
                 dataset.id = data_id;
@@ -218,6 +253,8 @@ int main(int argc, char** argv)
         else if (respawn_flag == 3) {  // 3. 타겟 포지션 보내고 데이터셋에 저장하기.    
      
             timer2 += 0.5;
+            timer_reset += 0.5;
+
             if(timer2 == 0.5) {       
                 std::cout << "publish target position" << std::endl;        
 
@@ -256,7 +293,18 @@ int main(int argc, char** argv)
                 
                 yaw_target_dis = yaw_target / num_div;
             }
+            std::cout << "move... timer_reset : " << timer_reset << std::endl;        
             
+            if(timer_reset >= 20) {
+                std_msgs::Float32 xvel_target;
+                xvel_target.data = 0;
+                pub_xvel.publish(xvel_target);
+                timer_reset = 0;
+                ROS_ERROR("reset");
+            
+                respawn_flag = 5;
+            }
+
             k++;
 
             if(k < num_div + 1) {
@@ -296,8 +344,19 @@ int main(int argc, char** argv)
             pub_path.publish(path);
 
             if(abs(yaw_target - _yaw_target) < 0.01) {
-                k = 0;
-                timer2 = 0;
+                
+                _timer2 += 0.5;
+
+                if (_timer2 == 1) {
+                    k = 0;
+                    timer2 = 0;
+                    std_msgs::Float32 xvel_target;
+                    xvel_target.data = 0.1;
+                    pub_xvel.publish(xvel_target);
+
+                    respawn_flag = 4;
+                    _timer2 = 0;
+                }
 
                 // xvel_target = (rand_x_tar - x_init)/10; 
                 // yvel_target = (rand_y_tar - y_init)/10;
@@ -310,16 +369,26 @@ int main(int argc, char** argv)
                 // vel_target.data.push_back(yvel_target);
                 // pub_vel.publish(vel_target);
 
-                std_msgs::Float32 xvel_target;
-                xvel_target.data = 0.1;
-                pub_xvel.publish(xvel_target);
-
-                respawn_flag = 4;
+                
             }
+
+           
 
         }
         else if(respawn_flag == 4) { // 4. 성공인지 실패인지 결과가 나오면 데이터셋에 저장하고 퍼블리시하기.
-            std::cout << "move ..." << std::endl;        
+            
+            timer_reset += 0.5;
+            std::cout << "move... timer_reset : " << timer_reset << std::endl;        
+
+            if(timer_reset >= 20) {
+                std_msgs::Float32 xvel_target;
+                xvel_target.data = 0;
+                pub_xvel.publish(xvel_target);
+                timer_reset = 0;
+                ROS_ERROR("reset");
+            
+                respawn_flag = 5;
+            }
 
             if (get_s_or_f == 1) {
                 // std_msgs::Float32MultiArray vel_target;
@@ -341,7 +410,10 @@ int main(int argc, char** argv)
                 pub_dataset.publish(dataset);
                 
                 respawn_flag = 5;
+                
+                timer_reset = 0;
             }
+
         }
         else if(respawn_flag == 5) { // 5. 로봇 crawl 자세로 바꾸기
 

@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   gazebo_msgs
   message_generation
   grid_map_msgs
+  std_srvs
 )
 
 ## System dependencies are found with CMake's conventions
